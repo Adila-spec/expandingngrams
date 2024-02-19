@@ -1,0 +1,54 @@
+ngram_freq = {}}
+for index, row in df.iterrows():
+  ngrams = row['Ngrams']
+  for ngram in ngrams:
+    if ngram in ngram_freq:
+      ngram_freq[ngram] += 1
+    else:
+      ngram_freq[ngram] = 1
+      
+max_freq = len(df) * 0.01
+new_ngrams = [
+    [ngram for ngram in ngrams if ngram_freq[ngram] < max_freq]
+    for ngrams in df['Ngrams']
+]
+
+
+from google.cloud import bigquery
+
+# Initialize the BigQuery client
+client = bigquery.Client()
+
+# Define the dataset and table to update
+dataset_id = 'gcp-bia-mle-dev.test'
+table_id = 'GWArchiveBlobAndContent_2024-01-09_WITH_NGRAMS'
+
+# Define the update query
+update_query = """
+    UPDATE `{}.{}`
+    SET column_to_update = {}
+    WHERE condition
+""".format(dataset_id, table_id, new_ngrams)
+
+# Run the update query
+query_job = client.query(update_query)
+
+# Wait for the query job to complete
+query_job.result()
+
+print("Table updated successfully.")
+
+
+
+# Function to process a single PDF file
+def process_pdf(blobname):
+    #print(blobname)
+    full_path = f"{bucket_name}/{blobname}" #Constructs the full path to the file in the GCS bucket.
+    with gcs_file_system.open(full_path, "rb") as f: #Opens the PDF file from GCS as a byte stream.
+        pdf_file_bytes = BytesIO(f.read()) #Uses fitz (PyMuPDF) to read the PDF file from the byte stream.
+    try:
+      document = fitz.open("pdf", pdf_file_bytes) #Extracts the text from each page of the PDF and combines it into a single string.
+    except:
+      return []
+    full_text = ' '.join([page.get_text() for page in document])
+    return generate_ngrams(full_text, n=3)  
